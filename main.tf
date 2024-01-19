@@ -1,9 +1,3 @@
-provider "aws" {
-  region = "ap-south-1"
-  access_key = "AKIA3ZZIKHCO6CD6HJYY"
-  secret_key = "rz3eAu7DbsplQuPVGFcscJ+FbuzgK+hLrCpLb3tL"
-}
-
 
 resource "aws_vpc" "example" {
   cidr_block          = "10.0.0.0/16"
@@ -14,12 +8,10 @@ resource "aws_vpc" "example" {
     Name = "example-vpc"
   }
 }
-
-
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.example.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "ap-south-1a"  
+  availability_zone       = "ap-south-1a"
   map_public_ip_on_launch = true
 
   tags = {
@@ -31,7 +23,7 @@ resource "aws_subnet" "public" {
 resource "aws_subnet" "private" {
   vpc_id                  = aws_vpc.example.id
   cidr_block              = "10.0.2.0/24"
-  availability_zone       = "ap-south-1b"  
+  availability_zone       = "ap-south-1b"
   map_public_ip_on_launch = false
 
   tags = {
@@ -44,42 +36,33 @@ resource "aws_launch_template" "example" {
   name          = "example-launch-template"
   image_id      = "ami-03f4878755434977f"  
   instance_type = "t2.micro"
-  key_name      = "Kotak.pem"  
+  key_name      = "Kotak"  
+  user_data     = base64encode("#!/bin/bash\napt-get update && apt-get install -y collectd")
   
-
-  user_data = <<-EOF
-    #!/bin/bash
-    # Install packages/scripts to report load average metrics
-    apt-get update && apt-get install -y collectd
-    # Configure collectd to send metrics to CloudWatch
-    # ...
-  EOF
 }
 
 
 resource "aws_autoscaling_group" "example" {
   launch_template {
     id      = aws_launch_template.example.id
-    version = "$Latest"  
+    version = "$Latest"
   }
   vpc_zone_identifier  = [aws_subnet.public.id, aws_subnet.private.id]
   min_size             = 2
   max_size             = 5
   health_check_type    = "EC2"
-  # target_group_arns    = ["your_target_group_arn"]  
 }
-
-
 resource "aws_appautoscaling_policy" "scale_out" {
+  depends_on         = [aws_autoscaling_group.example]  
   name               = "scale_out_on_load_average"
   service_namespace  = "ec2"
-  scalable_dimension = "ec2:instances"
-  resource_id        = "service/autoscaling/AutoScalingGroup:${aws_autoscaling_group.example.name}"
+  scalable_dimension = "ec2:autoScalingGroup:DesiredCapacity"
+  resource_id        = aws_autoscaling_group.example.id
   policy_type        = "StepScaling"
 
   step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
-    cooldown                = 300  # 
+    cooldown                = 300  
     metric_aggregation_type = "Average"
 
     step_adjustment {
@@ -88,8 +71,6 @@ resource "aws_appautoscaling_policy" "scale_out" {
     }
   }
 
- 
-
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
       predefined_metric_type = "ASGAverageLoadAverage"
@@ -97,13 +78,12 @@ resource "aws_appautoscaling_policy" "scale_out" {
     target_value = 75.0
   }
 }
-
-
 resource "aws_appautoscaling_policy" "scale_in" {
+  depends_on         = [aws_autoscaling_group.example] 
   name               = "scale_in_on_load_average"
   service_namespace  = "ec2"
-  scalable_dimension = "ec2:instances"
-  resource_id        = "service/autoscaling/AutoScalingGroup:${aws_autoscaling_group.example.name}"
+  scalable_dimension = "ec2:autoScalingGroup:DesiredCapacity"
+  resource_id        = aws_autoscaling_group.example.id
   policy_type        = "StepScaling"
 
   step_scaling_policy_configuration {
@@ -117,28 +97,25 @@ resource "aws_appautoscaling_policy" "scale_in" {
     }
   }
 }
-
-
 resource "aws_appautoscaling_scheduled_action" "refresh" {
-  name = refresh
+  depends_on         = [aws_autoscaling_group.example]  
+  name               = "refresh"
   service_namespace  = "ec2"
-  scalable_dimension = "ec2:instances"
-  resource_id        = "service/autoscaling/AutoScalingGroup:${aws_autoscaling_group.example.name}"
+  scalable_dimension = "ec2:autoScalingGroup:DesiredCapacity"
+  resource_id        = aws_autoscaling_group.example.id
   schedule           = "cron(0 12 * * ? *)"  # UTC 12am daily
-
   scalable_target_action {
     min_capacity       = 0
     max_capacity       = 0
   }
 }
-
-
 resource "aws_cloudwatch_metric_alarm" "example_alarm" {
+  depends_on          = [aws_autoscaling_group.example]  
   alarm_name          = "example-alarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 2
-  metric_name         = "LoadAverage"  
-  namespace           = "CustomMetrics"  
+  metric_name         = "LoadAverage"
+  namespace           = "CustomMetrics"
   period              = 300
   statistic           = "Average"
   threshold           = 75.0
