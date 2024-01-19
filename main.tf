@@ -4,7 +4,7 @@ provider "aws" {
   secret_key = "rz3eAu7DbsplQuPVGFcscJ+FbuzgK+hLrCpLb3tL"
 }
 
-# Create VPC
+
 resource "aws_vpc" "example" {
   cidr_block          = "10.0.0.0/16"
   enable_dns_support  = true
@@ -15,11 +15,11 @@ resource "aws_vpc" "example" {
   }
 }
 
-# Create public subnet
+
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.example.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "ap-south-1a"  # Specify your desired availability zone
+  availability_zone       = "ap-south-1a"  
   map_public_ip_on_launch = true
 
   tags = {
@@ -27,11 +27,11 @@ resource "aws_subnet" "public" {
   }
 }
 
-# Create private subnet
+
 resource "aws_subnet" "private" {
   vpc_id                  = aws_vpc.example.id
   cidr_block              = "10.0.2.0/24"
-  availability_zone       = "ap-south-1b"  # Specify another availability zone
+  availability_zone       = "ap-south-1b"  
   map_public_ip_on_launch = false
 
   tags = {
@@ -39,13 +39,13 @@ resource "aws_subnet" "private" {
   }
 }
 
-# Create Launch Template
+
 resource "aws_launch_template" "example" {
   name          = "example-launch-template"
-  image_id      = "ami-03f4878755434977f"  # Replace with your Ubuntu AMI ID
+  image_id      = "ami-03f4878755434977f"  
   instance_type = "t2.micro"
-  key_name      = "Kotak.pem"  # Replace with your key pair name
-  # Add other configuration options as needed
+  key_name      = "Kotak.pem"  
+  
 
   user_data = <<-EOF
     #!/bin/bash
@@ -56,20 +56,20 @@ resource "aws_launch_template" "example" {
   EOF
 }
 
-# Create Auto Scaling Group
+
 resource "aws_autoscaling_group" "example" {
   launch_template {
     id      = aws_launch_template.example.id
-    version = "$Latest"  # Replace with the actual version number if not using the latest
+    version = "$Latest"  
   }
   vpc_zone_identifier  = [aws_subnet.public.id, aws_subnet.private.id]
   min_size             = 2
   max_size             = 5
   health_check_type    = "EC2"
-  # target_group_arns    = ["your_target_group_arn"]  # Optional, if using LB
+  # target_group_arns    = ["your_target_group_arn"]  
 }
 
-# Scale-Out Policy (based on load average)
+
 resource "aws_appautoscaling_policy" "scale_out" {
   name               = "scale_out_on_load_average"
   service_namespace  = "ec2"
@@ -79,7 +79,7 @@ resource "aws_appautoscaling_policy" "scale_out" {
 
   step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
-    cooldown                = 300  # 5-minute cooldown
+    cooldown                = 300  # 
     metric_aggregation_type = "Average"
 
     step_adjustment {
@@ -98,7 +98,7 @@ resource "aws_appautoscaling_policy" "scale_out" {
   }
 }
 
-# Scale-In Policy (based on load average)
+
 resource "aws_appautoscaling_policy" "scale_in" {
   name               = "scale_in_on_load_average"
   service_namespace  = "ec2"
@@ -118,7 +118,7 @@ resource "aws_appautoscaling_policy" "scale_in" {
   }
 }
 
-# Scheduled Action for Daily Refresh
+
 resource "aws_appautoscaling_scheduled_action" "refresh" {
   name = refresh
   service_namespace  = "ec2"
@@ -132,7 +132,7 @@ resource "aws_appautoscaling_scheduled_action" "refresh" {
   }
 }
 
-# CloudWatch Alarm for Email Notifications
+
 resource "aws_cloudwatch_metric_alarm" "example_alarm" {
   alarm_name          = "example-alarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
